@@ -2,104 +2,79 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import pandas as pd
-import io
 
-# Configuración visual Pro
+# Configuración de página con icono de banco
 st.set_page_config(page_title="Scanner 606 Pro RD", layout="wide", page_icon="🏦")
 
-# Estilo personalizado con CSS
+# Diseño Premium con CSS
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 10px; height: 3em; background-color: #007bff; color: white; }
-    .status-box { padding: 20px; border-radius: 10px; background-color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .stApp { background-color: #f8f9fa; }
+    .stButton>button { background-color: #003366; color: white; border-radius: 8px; font-weight: bold; }
+    .stDataFrame { background-color: white; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏦 Scanner 606 Pro")
-st.subheader("Inteligencia Artificial para Contabilidad Dominicana")
+# Título con estilo
+st.title("🏦 Scanner 606 Inteligente")
+st.caption("Solución Profesional para Reportes de Gastos DGII")
+st.divider()
 
-# Configuración de la API con manejo de errores
+# Validación de API Key
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("🔑 Error: Configura la API Key en los Secrets de Streamlit.")
+    st.error("⚠️ Configura la API Key en los Secrets de Streamlit.")
 
+# Sidebar informativa
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2618/2618576.png", width=100)
-    st.header("Panel de Control")
-    periodo = st.text_input("Periodo (AAAAMM)", value="202601")
-    st.divider()
-    st.write("📞 **Soporte Técnico:**")
-    st.write("Tu Nombre/Empresa")
+    st.header("⚙️ Panel de Control")
+    periodo = st.text_input("Periodo Fiscal (AAAAMM)", value="202601")
+    st.info("Sube las fotos de tus facturas y la IA extraerá los datos automáticamente para el formato 606.")
 
-# Carga de archivos
-archivos = st.file_uploader("Subir facturas (JPG, PNG)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+# Subida de archivos
+archivos = st.file_uploader("Arrastra aquí tus facturas", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
 if archivos:
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.info(f"📂 {len(archivos)} archivos cargados.")
-        boton = st.button("🚀 PROCESAR AHORA")
-
-    if boton:
+    if st.button(f"🔍 Procesar {len(archivos)} Factura(s)"):
         resultados = []
         progreso = st.progress(0)
         
         for i, archivo in enumerate(archivos):
             try:
                 img = Image.open(archivo)
-                # Redimensionar para asegurar que pase por la API
-                img.thumbnail((1000, 1000))
+                # EL ARREGLO ESTÁ AQUÍ: 'gemini-1.5-flash-latest'
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
                 
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                # Prompt más estricto para evitar errores
-                prompt = """Actúa como experto contable dominicano. Extrae de esta factura:
-                1. RNC Emisor (solo números)
-                2. NCF (ej: B01...)
-                3. Día del mes (2 dígitos)
-                4. Monto Total (solo números)
-                Responde estrictamente en este formato: RNC|NCF|DIA|MONTO"""
+                prompt = "Extrae de esta factura dominicana: RNC emisor, NCF, Día (2 dígitos), Monto Total. Responde estrictamente: RNC|NCF|DIA|MONTO"
                 
                 response = model.generate_content([prompt, img])
-                texto = response.text.strip()
+                datos = response.text.strip().split('|')
                 
-                # Limpieza de la respuesta
-                if "|" in texto:
-                    datos = texto.split('|')
-                    rnc_e = datos[0].strip()
-                    ncf_e = datos[1].strip()
-                    dia_e = datos[2].strip().zfill(2)
-                    monto_e = datos[3].strip().replace(',', '')
-                    
-                    fecha = f"{periodo}{dia_e}"
+                if len(datos) >= 4:
+                    rnc_e, ncf_e, dia_e, monto_e = [d.strip() for d in datos[:4]]
+                    fecha = f"{periodo}{dia_e.zfill(2)}"
+                    # Línea formato 606 DGII
                     linea = f"{rnc_e}|1|02|{ncf_e}||{fecha}||{monto_e}|0.00|{monto_e}|0.00|0.00|0.00|0.00|0.00|0.00||0.00|0.00|0.00|0.00|0.00|3"
-                    
-                    resultados.append({
-                        "RNC Emisor": rnc_e,
-                        "NCF": ncf_e,
-                        "Monto": monto_e,
-                        "Línea 606": linea
-                    })
+                    resultados.append({"RNC": rnc_e, "NCF": ncf_e, "Monto": monto_e, "Linea": linea})
             except Exception as e:
-                st.error(f"Error en {archivo.name}: {str(e)}")
+                st.error(f"Error en {archivo.name}: Verifique la nitidez de la imagen.")
             
             progreso.progress((i + 1) / len(archivos))
 
         if resultados:
-            with col2:
-                st.success("✅ Procesamiento completado")
-                df = pd.DataFrame(resultados)
-                # Tabla elegante
-                st.dataframe(df[["RNC Emisor", "NCF", "Monto"]], use_container_width=True)
-                
-                # Generar TXT para descargar
-                txt_content = "\n".join([r["Línea 606"] for r in resultados])
-                st.download_button(
-                    label="📥 Descargar Formato 606 (.txt)",
-                    data=txt_content,
-                    file_name=f"606_{periodo}.txt",
-                    mime="text/plain"
-                )
+            st.success("🎉 ¡Extracción exitosa!")
+            df = pd.DataFrame(resultados)
+            
+            # Mostrar tabla elegante
+            st.subheader("📋 Datos Extraídos")
+            st.dataframe(df[["RNC", "NCF", "Monto"]], use_container_width=True)
+            
+            # Botón de descarga TXT
+            txt_data = "\n".join(df["Linea"].tolist())
+            st.download_button(
+                label="📥 Descargar TXT para DGII",
+                data=txt_data,
+                file_name=f"606_{periodo}.txt",
+                mime="text/plain"
+            )
