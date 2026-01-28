@@ -3,45 +3,67 @@ import google.generativeai as genai
 from PIL import Image
 import pandas as pd
 
-st.set_page_config(page_title="Scanner 606 Pro", layout="wide")
+# 1. Configuración de la página
+st.set_page_config(page_title="Scanner 606 RD - Estable", layout="wide")
+st.title("🏦 Scanner 606 Dominicano")
 
-# Título
-st.title("🏦 Scanner 606 RD")
+# 2. Configuración de la API (FORZANDO VERSIÓN ESTABLE)
+if "GEMINI_API_KEY" in st.secrets:
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Usamos el modelo sin prefijos raros para que Google elija la versión estable automática
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        st.success("✅ Sistema conectado correctamente.")
+    except Exception as e:
+        st.error(f"Error de configuración: {e}")
+else:
+    st.error("❌ Falta la API Key en Secrets.")
 
-# 1. Configurar la Llave directamente desde los Secrets
-try:
-    if "GEMINI_API_KEY" in st.secrets:
-        key = st.secrets["GEMINI_API_KEY"]
-        genai.configure(api_key=key)
-        st.success("✅ Conexión con Google establecida.")
-    else:
-        st.error("❌ No se encontró la GEMINI_API_KEY en Secrets.")
-except Exception as e:
-    st.error(f"Error configurando la llave: {e}")
-
-# 2. Subida de archivos
-archivo = st.file_uploader("Sube una factura", type=["jpg", "png", "jpeg"])
+# 3. Interfaz de usuario
+periodo = st.sidebar.text_input("Periodo (AAAAMM)", value="202601")
+archivo = st.file_uploader("Sube una factura nítida", type=["jpg", "png", "jpeg"])
 
 if archivo:
     img = Image.open(archivo)
-    st.image(img, caption="Imagen cargada", width=300)
+    st.image(img, caption="Factura cargada", width=400)
     
-    if st.button("Procesar Factura"):
+    if st.button("🚀 Procesar Factura"):
         try:
-            # Usamos el modelo más estable
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # Prompt optimizado
+            prompt = "Eres un contador experto. Lee esta factura y entrega: RNC emisor, NCF, Día, Monto total. Formato: RNC|NCF|DIA|MONTO"
             
-            prompt = "Actúa como contador. Extrae de esta factura: RNC Emisor, NCF, Día, Monto Total. Responde en este formato: RNC|NCF|DIA|MONTO"
-            
-            with st.spinner('La IA está leyendo la factura...'):
+            with st.spinner('Analizando datos...'):
+                # Aquí está el truco: generamos contenido de forma simple
                 response = model.generate_content([prompt, img])
-                st.info(f"Respuesta de la IA: {response.text}")
                 
-                # Intentar mostrar en tabla
-                datos = response.text.split('|')
-                if len(datos) >= 4:
-                    df = pd.DataFrame([{"RNC": datos[0], "NCF": datos[1], "Día": datos[2], "Monto": datos[3]}])
-                    st.table(df)
+                if response.text:
+                    st.info(f"Datos recibidos: {response.text}")
+                    datos = response.text.split('|')
+                    
+                    if len(datos) >= 4:
+                        res_dict = {
+                            "RNC Emisor": datos[0].strip(),
+                            "NCF": datos[1].strip(),
+                            "Día": datos[2].strip().zfill(2),
+                            "Monto": datos[3].strip()
+                        }
+                        st.table(pd.DataFrame([res_dict]))
+                        
+                        # Generar línea 606
+                        fecha = f"{periodo}{res_dict['Día'][:2]}"
+                        monto = res_dict['Monto'].replace(',', '')
+                        linea = f"{res_dict['RNC Emisor']}|1|02|{res_dict['NCF']}||{fecha}||{monto}|0.00|{monto}|0.00|0.00|0.00|0.00|0.00|0.00||0.00|0.00|0.00|0.00|0.00|3"
+                        
+                        st.download_button("📥 Descargar TXT", data=linea, file_name=f"606_{periodo}.txt")
+                else:
+                    st.warning("La IA no pudo leer texto en la imagen.")
+                    
         except Exception as e:
-            st.error(f"Error detallado: {e}")
-            st.write("Copia este error y pásamelo para decirte qué dice Google.")
+            # Si el error 404 persiste, intentamos con el modelo Pro automáticamente
+            st.warning("Reintentando con modelo alternativo...")
+            try:
+                model_alt = genai.GenerativeModel('gemini-1.5-pro')
+                response = model_alt.generate_content([prompt, img])
+                st.write(response.text)
+            except Exception as e2:
+                st.error(f"Error persistente: {e2}")
