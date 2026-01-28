@@ -1,62 +1,37 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import pandas as pd
 
-st.set_page_config(page_title="Scanner 606 RD Pro", layout="wide")
-st.title("🏦 Scanner 606 Dominicano")
+st.set_page_config(page_title="Scanner 606 RD", page_icon="🏦")
+st.title("🏦 Scanner 606 Pro")
 
-# 1. Configuración de la API con tu nueva llave
-# Nota: Es mejor que esta llave esté en Settings > Secrets como GEMINI_API_KEY
+# Usar la llave desde los Secrets (es más seguro y estable)
 if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=API_KEY)
+    
+    # Intentar inicializar el modelo
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        st.success("✅ Sistema listo para procesar facturas.")
+    except Exception as e:
+        st.error(f"Error de conexión: {e}")
 else:
-    api_key="AIzaSyBOfHfs5Wx5hKXyNEFhvqOEuS8ngaAgx1U" # Tu nueva llave
+    st.warning("⚠️ Por favor, introduce la API Key en los Secrets de Streamlit.")
 
-genai.configure(api_key=api_key)
-
-# 2. Selección del modelo (Intentando la versión más estable primero)
-try:
-    # Esta es la forma más segura de llamar al modelo en 2026
-    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
-    st.success("✅ Conexión establecida con la nueva llave.")
-except Exception as e:
-    st.error(f"Error al conectar con el modelo: {e}")
-
-# 3. Interfaz de usuario
-archivo = st.file_uploader("Sube una foto de la factura", type=["jpg", "png", "jpeg"])
+archivo = st.file_uploader("Sube una factura (JPG o PNG)", type=["jpg", "png", "jpeg"])
 
 if archivo:
     img = Image.open(archivo)
-    st.image(img, caption="Factura cargada", width=400)
+    st.image(img, width=400)
     
-    if st.button("🚀 Extraer Datos"):
+    if st.button("🚀 PROCESAR FACTURA"):
         try:
-            # Prompt optimizado
             prompt = "Actúa como contador dominicano. Extrae: RNC emisor, NCF, Día, Monto total. Responde solo: RNC|NCF|DIA|MONTO"
             
-            with st.spinner('Analizando imagen...'):
+            with st.spinner('IA analizando...'):
                 response = model.generate_content([prompt, img])
-                
-                if response.text:
-                    resultado = response.text.strip()
-                    st.info(f"Datos detectados: {resultado}")
-                    
-                    if "|" in resultado:
-                        datos = resultado.split('|')
-                        df = pd.DataFrame([{
-                            "RNC": datos[0], 
-                            "NCF": datos[1], 
-                            "Día": datos[2], 
-                            "Monto": datos[3]
-                        }])
-                        st.table(df)
-                        
-                        # Generar el TXT para la DGII
-                        linea = f"{datos[0]}|1|02|{datos[1]}||202601{datos[2].zfill(2)}||{datos[3]}|||||||||||||3"
-                        st.download_button("📥 Descargar 606.txt", data=linea, file_name="606_reporte.txt")
-                
+                st.info(f"Datos: {response.text}")
         except Exception as e:
-            st.error(f"Hubo un problema: {e}")
-            st.info("Prueba a darle al botón de nuevo, a veces la primera conexión falla.")
-
+            st.error(f"Error: {e}")
+            st.info("Si dice 'Expired', intenta crear la llave de nuevo en AI Studio, a veces la primera falla.")
