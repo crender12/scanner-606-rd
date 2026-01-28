@@ -11,7 +11,7 @@ st.title("🏦 Scanner 606 Dominicano")
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
-    api_key = "AIzaSyBOfHfs5Wx5hKXyNEFhvqOEuS8ngaAgx1U" # Tu nueva llave
+    api_key="AIzaSyBOfHfs5Wx5hKXyNEFhvqOEuS8ngaAgx1U" # Tu nueva llave
 
 genai.configure(api_key=api_key)
 
@@ -59,3 +59,4 @@ if archivo:
         except Exception as e:
             st.error(f"Hubo un problema: {e}")
             st.info("Prueba a darle al botón de nuevo, a veces la primera conexión falla.")
+
